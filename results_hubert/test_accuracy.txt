@@ -1,0 +1,1 @@
+Test Accuracy: {'eval_loss': 0.8063910603523254, 'eval_accuracy': 0.7529305680793508, 'eval_runtime': 11.6141, 'eval_samples_per_second': 95.487, 'eval_steps_per_second': 23.936, 'epoch': 3.0}

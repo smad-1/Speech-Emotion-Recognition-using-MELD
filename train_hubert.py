@@ -1,9 +1,10 @@
+import os
 from datasets import load_from_disk
 from transformers import AutoFeatureExtractor, HubertForSequenceClassification, Trainer, TrainingArguments, DataCollatorWithPadding
 from sklearn.metrics import accuracy_score
 
 # Load dataset and processor
-dataset = load_from_disk("meld_dataset_preprocessed")
+dataset = load_from_disk("/home/bio/SMS/clone/Speech-Emotion-Recognition-using-MELD/meld_dataset_preprocessed")
 processor = AutoFeatureExtractor.from_pretrained("facebook/hubert-base-ls960")
 
 model = HubertForSequenceClassification.from_pretrained("facebook/hubert-base-ls960", num_labels=7)
@@ -46,6 +47,14 @@ trainer.train()
 print("📊 Final test set accuracy:")
 results = trainer.evaluate(dataset["test"])
 print("📊 Final test set accuracy:", results)
+
+os.makedirs("results_hubert", exist_ok=True)
+with open("results_hubert/test_accuracy.txt", "w") as f:
+    f.write(f"Test Accuracy: {results}\n")
+
+#save model
+model.save_pretrained("./hubert-emotion-meld-final")
+processor.save_pretrained("./hubert-emotion-meld-final")
 
 # Get predictions on test set
 print("📝 Saving predictions to CSV...")

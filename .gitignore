@@ -1,7 +1,22 @@
-venv/ 
-__pycache__/ 
-meld_dataset/ 
-hubert_results/ 
-*.mp4
-*.csv
+
+# Ignore datasets and other large or sensitive folders
 meld_data/
+meld_dataset/
+meld_dataset_preprocessed/
+venv_hubert/
+hubert-emotion-meld-final/
+hubert_results/
+wav2vec2/MELD/
+wav2vec2/wav2vec2-emotion-meld/
+wav2vec2/wav2vec2-emotion-meld-final/
+wav2vec2/new.py
+wav2vec2/new2.py
+*.zip
+*.csv
+*.json
+*.mp4
+
+# Ignore OS or IDE specific files
+__pycache__/
+*.pyc
+.DS_Store

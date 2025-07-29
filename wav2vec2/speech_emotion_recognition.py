@@ -14,12 +14,15 @@ import warnings
 # Suppress librosa audioread deprecation warning
 warnings.filterwarnings("ignore", category=FutureWarning, module="librosa.core.audio")
 
+# Set PyTorch CUDA memory management to reduce fragmentation
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
+
 # Set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Load MELD dataset
-meld_path = "MELD"  # Path to MELD folder
+meld_path = "/home/bio/SMS/MELD"  # Adjusted to your Ubuntu project directory
 train_csv = os.path.join(meld_path, "train", "train_sent_emo.csv")
 dev_csv = os.path.join(meld_path, "dev", "dev_sent_emo.csv")
 test_csv = os.path.join(meld_path, "test", "test_sent_emo.csv")
@@ -70,22 +73,20 @@ model = Wav2Vec2ForSequenceClassification.from_pretrained(
     num_labels=len(label_encoder.classes_)
 ).to(device)
 
+# Enable gradient checkpointing to save memory
+model.gradient_checkpointing_enable()
+
 # Preprocess audio function
 def preprocess_audio(batch):
     try:
-        # Load with soundfile to ensure consistent handling of FLAC files
         audio, sr = sf.read(batch['audio_path'])
-        # Resample to 16kHz if needed
         if sr != 16000:
             audio = librosa.resample(audio, orig_sr=sr, target_sr=16000)
-        # Ensure float32 type
         audio = audio.astype(np.float32)
-        # Process audio with Wav2Vec2 processor
         inputs = processor(audio, sampling_rate=16000, return_tensors="pt", padding=True)
         batch['input_values'] = inputs.input_values.squeeze().numpy().astype(np.float32)
     except Exception as e:
         print(f"Error processing {batch['audio_path']}: {str(e)}")
-        # Return zero array with float32 type for consistency
         batch['input_values'] = np.zeros(16000, dtype=np.float32)
     return batch
 
@@ -98,12 +99,11 @@ test_dataset = test_dataset.map(preprocess_audio, remove_columns=['audio_path'])
 def data_collator(features):
     input_values = [torch.tensor(f['input_values'], dtype=torch.float32) for f in features if 'input_values' in f]
     labels = [f['label'] for f in features if 'input_values' in f]
-    if not input_values:  # Handle empty batch
+    if not input_values:
         return None
-    # Pad input_values, keep on CPU to allow pin_memory
     input_values = torch.nn.utils.rnn.pad_sequence(input_values, batch_first=True)
     return {
-        'input_values': input_values,  # Keep on CPU, Trainer will move to GPU
+        'input_values': input_values,
         'labels': torch.tensor(labels, dtype=torch.long)
     }
 
@@ -120,9 +120,9 @@ training_args = TrainingArguments(
     eval_strategy="epoch",
     save_strategy="epoch",
     learning_rate=3e-5,
-    per_device_train_batch_size=4,  # Reduced to avoid OOM
-    per_device_eval_batch_size=4,   # Reduced to avoid OOM
-    gradient_accumulation_steps=2,  # Simulate batch size of 8
+    per_device_train_batch_size=8,  # Reduced to avoid OOM
+    per_device_eval_batch_size=8,
+    gradient_accumulation_steps=1,  # No need with reduced batch size
     num_train_epochs=3,
     weight_decay=0.01,
     save_total_limit=2,
@@ -150,6 +150,10 @@ trainer.train()
 results = trainer.evaluate(test_dataset)
 print(f"Test set accuracy: {results['eval_accuracy']}")
 
+# Save test accuracy
+with open("results/test_accuracy.txt", "w") as f:
+    f.write(f"Test Accuracy: {results['eval_accuracy']:.4f}\n")
+
 # Save the model
 model.save_pretrained("./wav2vec2-emotion-meld-final")
 processor.save_pretrained("./wav2vec2-emotion-meld-final")
@@ -170,3 +174,28 @@ def predict_emotion(audio_path):
 # Test inference
 sample_audio = test_df['audio_path'].iloc[0]
 print(f"Predicted emotion for {sample_audio}: {predict_emotion(sample_audio)}")
+
+# Get predictions on test set
+pred_logits = trainer.predict(test_dataset).predictions
+pred_labels = np.argmax(pred_logits, axis=-1)
+true_labels = test_dataset['label']
+
+# Save predictions vs true labels
+with open("results/predictions_vs_truth.txt", "w") as f:
+    f.write("Index\tTrue_Label\tPredicted_Label\n")
+    for i, (true, pred) in enumerate(zip(true_labels, pred_labels)):
+        true_label = label_encoder.inverse_transform([true])[0]
+        pred_label = label_encoder.inverse_transform([pred])[0]
+        f.write(f"{i}\t{true_label}\t{pred_label}\n")
+
+from sklearn.metrics import classification_report
+
+# Get human-readable label names
+target_names = label_encoder.classes_
+
+# Generate classification report
+report = classification_report(true_labels, pred_labels, target_names=target_names)
+
+# Save classification report
+with open("results/classification_report.txt", "w") as f:
+    f.write(report)
