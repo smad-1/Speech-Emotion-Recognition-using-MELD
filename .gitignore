@@ -15,7 +15,8 @@ wav2vec2/new2.py
 *.csv
 *.json
 *.mp4
-
+wav2vec2_reg_and_ui/model.safetensors
+hubert_reg_and_ui/model.safetensors
 # Ignore OS or IDE specific files
 __pycache__/
 *.pyc
